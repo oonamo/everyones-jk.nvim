@@ -1,5 +1,20 @@
+---@class jk.module
+---@field config jk.config
+---@field _j table
+---@field _k table
 local M = {}
+
 local H = {}
+
+---@class jk.config.keys
+---@field [1] string
+---@field j string[2]
+---@field start? string|fun()
+
+---@class jk.config
+---@field keys jk.config.keys[]
+---@field stop_on_err boolean
+---@field use_recommended boolean
 
 H.recommendations = {
 	keys = {
@@ -28,6 +43,7 @@ H.defaults = {
 	keys = {},
 }
 
+---@param opts jk.config
 function M.setup(opts)
 	if opts.use_recommended then
 		opts = vim.tbl_extend("force", H.recommendations, opts or {})
@@ -53,6 +69,7 @@ function H.get_old_jk()
 	M._k = k
 end
 
+--- Restores j and k keymaps if they were ever created
 function M.restore_keymaps()
 	if M._j.callback or M._j.rhs then
 		vim.keymap.set("n", "j", M._j.callback or M._j.rhs, {
@@ -78,6 +95,8 @@ function H.stop_jk()
 	M.restore_keymaps()
 end
 
+---@param j_f fun()
+---@param k_f fun()
 function H.gen_jk_func(j_f, k_f)
 	return function()
 		local char = vim.fn.getcharstr()
@@ -100,6 +119,7 @@ function H.gen_jk_func(j_f, k_f)
 	end
 end
 
+---@param cmd string|function
 function H.exec_cmd(cmd)
 	if type(cmd) == "string" then
 		return pcall(vim.cmd, cmd)
@@ -110,6 +130,10 @@ function H.exec_cmd(cmd)
 	end
 end
 
+---Calls a command safely. Notifies user on error
+---@param v jk.config.keys
+---@param cmd string|function
+---@return true|false
 function H.safe_call_cmd(v, cmd)
 	local ok, err = H.exec_cmd(cmd)
 	if not ok then
@@ -118,6 +142,9 @@ function H.safe_call_cmd(v, cmd)
 	return ok
 end
 
+---Creates mappings for an action
+---@param char string
+---@param v jk.config.keys
 function H.create_map(char, v)
 	local function map(c)
 		return function()
@@ -128,7 +155,7 @@ function H.create_map(char, v)
 			return ok == false
 		end
 	end
-	vim.keymap.set("n", v[char][1], function()
+	vim.keymap.set("n", v[char][2], function()
 		if v.start then
 			local ok = H.safe_call_cmd(v, v.start)
 			if not ok then
@@ -152,6 +179,4 @@ function H.set_keymaps()
 	end
 end
 
-M.setup({
-	use_recommended = true,
-})
+return M
