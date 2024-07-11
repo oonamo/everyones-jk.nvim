@@ -4,11 +4,14 @@
 ---@field _k table
 local M = {}
 
+M.config = {}
+
 local H = {}
 
 ---@class jk.config.keys
 ---@field [1] string
 ---@field j string[2]
+---@field k string[2]
 ---@field start? string|fun()
 
 ---@class jk.config
@@ -43,14 +46,14 @@ H.defaults = {
 	keys = {},
 }
 
----@param opts jk.config
+---@param opts? jk.config
 function M.setup(opts)
-	if opts.use_recommended then
+	if opts and opts.use_recommended then
 		opts = vim.tbl_extend("force", H.recommendations, opts or {})
 	else
-		M.keys = opts.keys or {}
+		M.config.keys = opts and opts.keys or {}
 	end
-	M.config = vim.tbl_extend("force", H.defaults, opts)
+	M.config = vim.tbl_extend("force", H.defaults, opts or {})
 	H.get_old_jk()
 	H.set_keymaps()
 end
@@ -155,7 +158,7 @@ function H.create_map(char, v)
 			return ok == false
 		end
 	end
-	vim.keymap.set("n", v[char][2], function()
+	vim.keymap.set("n", v[char][1], function()
 		if v.start then
 			local ok = H.safe_call_cmd(v, v.start)
 			if not ok then
