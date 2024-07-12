@@ -17,7 +17,6 @@ local M = {}
 --- Custom keymapping for this character
 ---@field map? fun(c: string)
 
----@class jk.config
 M.config = {}
 
 ---@class jk._help
@@ -44,6 +43,10 @@ local H = {}
 ---@field stop_on_err boolean
 --- If true, merges recommended keys
 ---@field use_recommended boolean
+--- Set 'j' as something else
+---@field j string
+--- Set 'k' as something else
+---@field k string
 
 H.recommendations = {
 	keys = {
@@ -81,6 +84,8 @@ H.recommendations = {
 H.defaults = {
 	stop_on_err = true,
 	keys = {},
+	j = "j",
+	k = "k",
 }
 
 ---@param opts? jk.config
@@ -128,7 +133,7 @@ end
 --- Restores j and k keymaps if they were ever created
 function M.restore_keymaps()
 	if M._j.callback or M._j.rhs then
-		vim.keymap.set("n", "j", M._j.callback or M._j.rhs, {
+		vim.keymap.set("n", M.config.j, M._j.callback or M._j.rhs, {
 			desc = M._j.desc,
 			expr = M._j.expr == 1,
 			silent = M._j.silent == 1,
@@ -137,7 +142,7 @@ function M.restore_keymaps()
 		})
 	end
 	if M._k.callback or M._k.rhs then
-		vim.keymap.set("n", "k", M._k.callback or M._k.rhs, {
+		vim.keymap.set("n", M.config.k, M._k.callback or M._k.rhs, {
 			desc = M._k.desc,
 			expr = M._k.expr == 1,
 			silent = M._k.silent == 1,
@@ -176,8 +181,8 @@ function H.message(msg)
 end
 
 function H.stop_jk()
-	vim.keymap.del("n", "j")
-	vim.keymap.del("n", "k")
+	vim.keymap.del("n", M.config.j)
+	vim.keymap.del("n", M.config.k)
 	M.restore_keymaps()
 end
 
@@ -192,13 +197,13 @@ end
 function H.gen_jk_func(j_f, k_f)
 	return function()
 		local char = vim.fn.getcharstr()
-		if char == "j" then
+		if char == M.config.j then
 			if j_f() then
 				if M.config.stop_on_err then
 					H.stop_jk()
 				end
 			end
-		elseif char == "k" then
+		elseif char == M.config.k then
 			if k_f() then
 				if M.config.stop_on_err then
 					H.stop_jk()
@@ -236,36 +241,39 @@ function H.safe_call_cmd(v, cmd)
 	return ok
 end
 
+function H.exec_expr(cmd, after)
+	if type(cmd) == "string" then
+		H.input(cmd)
+		H.input(after)
+	elseif type(cmd) == "function" then
+		H.input(cmd())
+		H.input(after)
+	else
+		error("expressive mapping is not a function that or string")
+	end
+end
 ---Creates mappings for an action
----@param char string
+---@param jk string
 ---@param v jk.config.keys
-function H.create_map(char, v)
+---@param actual_char string
+function H.create_map(jk, v, actual_char)
 	---@param c string
 	local function map(c)
 		if v[c].expr then
-			if type(v[c][2]) == "string" then
-				return function()
-					H.input(v[c][2])
-					H.input(c)
-				end
-			elseif type(v[c][2]) == "function" then
-				return function()
-					H.input(v[c][2]())
-					H.input(c)
-				end
+			return function()
+				H.exec_expr(v[c][2])
 			end
-			error("expressive mapping is not a function that or string")
 		end
 		return function()
 			local ok = H.safe_call_cmd(v, v[c][2])
 			if ok then
-				H.input(c)
+				H.input(actual_char)
 			end
 			return ok == false
 		end
 	end
 
-	vim.keymap.set("n", v[char][1], function()
+	vim.keymap.set("n", v[jk][1], function()
 		if v.start then
 			local ok, should_start = H.safe_call_cmd(v, v.start)
 			if not ok or should_start == false then
@@ -273,33 +281,30 @@ function H.create_map(char, v)
 			end
 		end
 
-		if v[char].expr then
-			if type(v[char][2]) == "string" then
-				H.input(v[char][2])
-			elseif type(v[char][2]) == "function" then
-				H.input(v[char][2]())
-			else
-				error("expressive mapping is not a string or function")
-			end
+		if v[jk].expr then
+			H.exec_expr(v[jk][2])
 		else
-			local ok = H.exec_cmd(v[char][2])
+			local ok = H.exec_cmd(v[jk][2])
 			if not ok then
 				return
 			end
 		end
-		H.unmap_jk()
 
-		vim.keymap.set("n", "j", H.gen_jk_func(v.j.map or map("j"), v.k.map or map("k")))
-		vim.keymap.set("n", "k", H.gen_jk_func(v.j.map or map("j"), v.k.map or map("k")))
-		H.input(char)
+		H.get_old_jk()
+		H.unmap_jk()
+		vim.keymap.set("n", M.config.j, H.gen_jk_func(v.j.map or map("j"), v.k.map or map("k")))
+		vim.keymap.set("n", M.config.k, H.gen_jk_func(v.j.map or map("j"), v.k.map or map("k")))
+		H.input(actual_char)
 	end)
 end
 
 ---Sets keymap for jk
 function H.set_keymaps()
+	local j = M.config.j
+	local k = M.config.k
 	for _, v in ipairs(M.config.keys or {}) do
-		H.create_map("j", v)
-		H.create_map("k", v)
+		H.create_map("j", v, j)
+		H.create_map("k", v, k)
 	end
 end
 
